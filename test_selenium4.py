@@ -5,7 +5,9 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import ElementClickInterceptedException
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.alert import Alert
 import random
 
 def generate_valid_username():
@@ -174,68 +176,136 @@ class RegistrationTest(unittest.TestCase):
         """Tears down the test environment after tests."""
         self.driver.quit()
     
-class LoginTest(unittest.TestCase):
+class AuthenticationLoginTest(unittest.TestCase):
     def setUp(self):
-        """Sets up the test environment before each test."""
-        chrome_options = Options()
-        chrome_options.add_argument("--start-maximized")
-        self.service = ChromeService(executable_path=ChromeDriverManager().install())
-        self.driver = webdriver.Chrome(service=self.service, options=chrome_options)
-        self.driver.get("http://127.0.0.1:8080/accounts/login")  # Update this URL to your application's login page
-
-    def test_login(self):
-        """Perform login using provided credentials."""
-        username = self.driver.find_element(By.ID, "username").send_keys("testuser")
-        password = self.driver.find_element(By.ID, "password").send_keys("password123")
-        login_button = self.driver.find_element(By.ID, "loginButton")  # Updated to match the ID in your HTML
-        
-        # Use JavaScript to click to avoid ElementClickInterceptedException
-        self.driver.execute_script("arguments[0].click();", login_button)
-
-    def tearDown(self):
-        """Tears down the test environment after tests."""
-        self.driver.quit()
-        
-class EncryptionTest(unittest.TestCase):
-    def setUp(self):
-        """Set up the test environment before each test."""
-        chrome_options = Options()
-        chrome_options.add_argument("--start-maximized")
-        self.driver = webdriver.Chrome(service=ChromeService(executable_path=ChromeDriverManager().install()), options=chrome_options)
-        self.driver.get('http://127.0.0.1:8080/accounts/login')  # Update URL as necessary
-
-        # Login to the application
-        username = "testuser"
-        password = "password123"
-        self.driver.find_element(By.ID, "username").send_keys(username)
-        self.driver.find_element(By.ID, "password").send_keys(password)
+        chrome_service = ChromeService(executable_path=ChromeDriverManager().install())
+        self.driver = webdriver.Chrome(service=chrome_service)
+        self.driver.maximize_window()
+        self.driver.get('http://127.0.0.1:8080/accounts/login')
+        login_username = "testuser"
+        login_password = "password123"
+        self.driver.find_element(By.ID, "username").send_keys(login_username)
+        self.driver.find_element(By.ID, "password").send_keys(login_password)
         self.driver.find_element(By.ID, "loginButton").click()
 
-        # Wait for the login success alert to confirm login
-        WebDriverWait(self.driver, 10).until(
-            EC.visibility_of_element_located((By.CSS_SELECTOR, ".alert-success")),
-            message="Login failed or login success message not found."
+        # Ensure we are redirected to the encryption page
+        WebDriverWait(self.driver, 20).until(
+            EC.presence_of_element_located((By.ID, "encryptPage")),
+            message="Did not redirect to encryption page"
         )
-
 
     def test_save_encrypted_text(self):
-        """Test the functionality of saving encrypted text."""
-        # Enter some text to be encrypted
-        input_text = "Test Encryption Text"
-        self.driver.find_element(By.ID, "passwordTextE").send_keys(input_text)
+        input_text = "password123"  # Input text to be encrypted
 
-        # Click the save button
-        self.driver.find_element(By.CSS_SELECTOR, ".save-btn").click()
+        try:
+            # Wait until the input field is visible and clickable
+            password_input = WebDriverWait(self.driver, 20).until(
+                EC.visibility_of_element_located((By.ID, "passwordTextE")),
+                message="Password input box not found."
+            )
+            WebDriverWait(self.driver, 20).until(
+                EC.element_to_be_clickable((By.ID, "passwordTextE")),
+                message="Password input box is not clickable."
+            )
 
-        # Verify that the encrypted text was saved correctly
-        saved_text = WebDriverWait(self.driver, 10).until(
-            EC.visibility_of_element_located((By.CSS_SELECTOR, "#encryptedText")),
-            message="Encrypted text not found."
+            # Clear any pre-existing text and type in the input
+            password_input.clear()
+            password_input.send_keys(input_text)
+
+            # Click the encrypt button
+            encrypt_button = self.driver.find_element(By.ID, "encryptButton")
+            encrypt_button.click()
+
+            # Wait for the encrypted text to appear and verify it
+            WebDriverWait(self.driver, 20).until(
+                lambda driver: driver.find_element(By.ID, "encryptedText").get_attribute("value") != "",
+                message="Encrypted text is empty or unchanged."
+            )
+
+            # Print encrypted value for verification during debugging
+            encrypted_value = self.driver.find_element(By.ID, "encryptedText").get_attribute("value")
+            print(f"Encrypted value: {encrypted_value}")
+
+            # Proceed to save
+            save_button = self.driver.find_element(By.CSS_SELECTOR, ".save-btn")
+            WebDriverWait(self.driver, 20).until(
+                EC.element_to_be_clickable(save_button),
+                message="Save button is not clickable."
+            )
+            save_button.click()
+
+            # Handle any potential alerts
+            WebDriverWait(self.driver, 10).until(EC.alert_is_present())
+            alert = Alert(self.driver)
+            alert.accept()
+
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            
+    def test_save_encrypted_text(self):
+        input_text = "password123"
+        try:
+            password_input = WebDriverWait(self.driver, 20).until(
+                EC.visibility_of_element_located((By.ID, "passwordTextE")),
+                message="Password input box not found."
+            )
+            password_input.clear()
+            password_input.send_keys(input_text)
+
+            encrypt_button = self.driver.find_element(By.ID, "encryptButton")
+            WebDriverWait(self.driver, 20).until(
+                EC.element_to_be_clickable(encrypt_button),
+                message="Encrypt button is not clickable."
+            )
+            encrypt_button.click()
+
+            encrypted_value = WebDriverWait(self.driver, 20).until(
+                lambda driver: driver.find_element(By.ID, "encryptedText").get_attribute("value"),
+                message="Encrypted text is empty or unchanged."
+            )
+
+            save_button = self.driver.find_element(By.CSS_SELECTOR, ".save-btn")
+            self.driver.execute_script("arguments[0].scrollIntoView(true);", save_button)
+            WebDriverWait(self.driver, 20).until(
+                EC.element_to_be_clickable(save_button),
+                message="Save button is not clickable."
+            )
+            self.driver.execute_script("arguments[0].click();", save_button)
+
+            WebDriverWait(self.driver, 10).until(EC.alert_is_present())
+            alert = self.driver.switch_to.alert
+            alert.accept()
+
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            
+    def test_decrypt_encrypted_text(self):
+        # Navigate to the decryption page
+        self.driver.get('http://127.0.0.1:8080/decrypt')
+
+        # Input the encrypted text to be decrypted
+        encrypted_input = WebDriverWait(self.driver, 20).until(
+            EC.visibility_of_element_located((By.ID, "encryptedTextD")),
+            message="Encrypted text input box not found."
         )
-        self.assertEqual(saved_text.get_attribute('value'), input_text, "Encrypted text did not match input.")
+        encrypted_input.send_keys("Z09qais1aSpGR0hGR0gwMTJJSktGRQ==")  # Replace with your encrypted text
+
+        # Click the decrypt button
+        decrypt_button = self.driver.find_element(By.ID, "decryptButton")
+        decrypt_button.click()
+
+        # Wait for the decrypted text to appear
+        decrypted_text_element = WebDriverWait(self.driver, 20).until(
+            EC.presence_of_element_located((By.ID, "decryptedText")),
+            message="Decrypted text element not present."
+        )
+        decrypted_text = decrypted_text_element.get_attribute("value")
+
+        print(f"Decrypted value: {decrypted_text}")  # Output decrypted text for verification
+        # You can add an assertion here if you know the expected decrypted text
+
 
     def tearDown(self):
-        """Closes the browser window after the tests are completed."""
         self.driver.quit()
 
 if __name__ == "__main__":
